@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Text.Pandoc (ParserState, WriterOptions(..))           
@@ -15,21 +16,21 @@ p x = unsafePerformIO $ print x >> return x
 
 ps ++> f = mapM_ (\p -> match p f) ps
 
--- Custom parser state for page reader
+-- Custom parser state for page reader.
 parserState :: ParserState
 parserState = defaultHakyllParserState
 
--- Custom writer options for page generator
+-- Custom writer options for page generator.
 writerOptions :: WriterOptions 
 writerOptions = defaultHakyllWriterOptions {
     writerHtml5 = True
 }
 
--- A number of recent posts to show
+-- A number of recent posts to show.
 recentPostNumber :: Int
 recentPostNumber = 8
 
--- Sorts post pages by their path and possibly ordering field in ascending order
+-- Sorts post pages by their path and possibly ordering field in ascending order.
 oldestFirst :: [Page a] -> [Page a]
 oldestFirst = sortBy compareDates
     where
@@ -41,11 +42,11 @@ oldestFirst = sortBy compareDates
         compareDates p1 p2 =
             let (path1, ord1) = (pagePath p1, pageOrd p1)
                 (path2, ord2) = (pagePath p2, pageOrd p2)
-                f1@[y1, m1, d1, name1, o1] = splitOn "/" path1 ++ [ord1]
-                f2@[y2, m2, d2, name2, o2] = splitOn "/" path2 ++ [ord2]
+                f1@[_, y1, m1, d1, name1, o1] = splitOn "/" path1 ++ [ord1]
+                f2@[_, y2, m2, d2, name2, o2] = splitOn "/" path2 ++ [ord2]
             in compare f1 f2
 
--- Sorts post pages by their path and possibly ordering field in descending order
+-- Sorts post pages by their path and possibly ordering field in descending order.
 newestFirst :: [Page a] -> [Page a]
 newestFirst = reverse . oldestFirst
 

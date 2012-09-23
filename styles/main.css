@@ -23,6 +23,10 @@ a:visited {
     color: #606060;
 }
 
+div.sep {
+    border-bottom: 1px solid #9F9F9F;
+}
+
 div.content {
     margin-right: auto;
     margin-left: auto;
@@ -46,8 +50,13 @@ div.container {
 
 div.index-post-list {
     float: left;
+    padding-right: 8px;
     width: 600px;
 }   
+
+div.index-post-list div.post-body {
+    border-bottom: 1px solid #9F9F9F;
+}
 
 div.small-post-list {
     overflow: hidden;
