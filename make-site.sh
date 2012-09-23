@@ -39,5 +39,6 @@ if [[ "$1" == "-p" ]]; then
     cd "$SITEDIR"
     git add .
     git commit -am "Site update"
+    git push
     echo "Done."
 fi
