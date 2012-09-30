@@ -89,6 +89,10 @@ a.post-link {
     font-weight: bold;
 }
 
+div.post-link-small-div {
+    margin-bottom: 5px;
+}
+
 span.post-date {
     font-size: 120%;
 }
