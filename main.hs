@@ -78,10 +78,10 @@ main = hakyll $ do
         ++> toplevel
 
     -- Generate index file
-    create "index.html" indexFile
+    create ["index.html"] indexFile
 
     -- Generate posts list file
-    create "posts.html" postsFile
+    create ["posts.html"] postsFile
 
     where
         css = route (setExtension "css") >> compile compressCssCompiler
@@ -90,47 +90,66 @@ main = hakyll $ do
 
         templates = compile templateCompiler
 
+        --- Tags
+
+        tags <- buildTags "posts/**" (fromCapture "tags/*")
+
+        -- The body will be executed for each tag with matching pattern; corresponding file
+        -- will be created
+        tagsRules $ \tag pattern -> do
+            return ()
+
+        --- Each post context
+
+        postContext = mconcat $ [ bodyField "body"
+                                , bodyField "postBody"
+                                , metadataField
+                                , urlField "url"
+                                , pathField "path"
+                                ]
+
         --- Post files
 
         posts = do
             route $ setExtension "html"
-            compile $ pageCompilerWith parserState writerOptions
-                >>> arr (copyBodyToField "postContent")   -- Save body to metadata to extract it in other pages
-                >>> applyTemplateCompiler "templates/post.html"
-                >>> applyTemplateCompiler "templates/default.html"
-                >>> relativizeUrlsCompiler
+            compile $ do
+                post <- pandocCompilerWith parserState writerOptions
+                return . copyBodyToField "postBody"   -- Save original body to metadata to extract it in other pages
+                >>= applyTemplateCompiler "templates/post.html"
+                >>= applyTemplateCompiler "templates/default.html"
+                >>= relativizeUrlsCompiler
 
         --- Different top-level pages
 
         toplevel = do
             route $ setExtension "html"
             compile $ pageCompilerWithFields parserState writerOptions id toplevelFields
-                >>> applyTemplateCompiler "templates/default.html"
-                >>> relativizeUrlsCompiler
+                >>= loadAndApplyTemplate "templates/default.html"
+                >>= relativizeUrlsCompiler
 
         toplevelFields = smallRecentPostsList
 
         --- Index file definitions
 
         indexFile = constA mempty
-            >>> indexFields
-            >>> applyTemplateCompiler "templates/index.html"
-            >>> applyTemplateCompiler "templates/default.html"
-            >>> relativizeUrlsCompiler
+            >>= indexFields
+            >>= applyTemplateCompiler "templates/index.html"
+            >>= applyTemplateCompiler "templates/default.html"
+            >>= relativizeUrlsCompiler
 
         indexFields = smallRecentPostsList 
-            >>> bigRecentPostsList
+            >>= bigRecentPostsList
 
         --- Posts file definition
 
         postsFile = constA mempty
-            >>> postsFields
-            >>> applyTemplateCompiler "templates/posts.html"
-            >>> applyTemplateCompiler "templates/default.html"
-            >>> relativizeUrlsCompiler
+            >>= postsFields
+            >>= applyTemplateCompiler "templates/posts.html"
+            >>= applyTemplateCompiler "templates/default.html"
+            >>= relativizeUrlsCompiler
 
         postsFields = fullPostsList
-            >>> smallRecentPostsList
+            >>= smallRecentPostsList
 
         --- Different post lists
 

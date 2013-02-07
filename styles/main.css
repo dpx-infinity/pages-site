@@ -49,9 +49,9 @@ div.container {
 }
 
 div.index-post-list {
-    float: left;
+    float: right;
     padding-right: 8px;
-    width: 600px;
+    width: 800px;
 }   
 
 div.index-post-list div.post-body {

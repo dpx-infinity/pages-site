@@ -18,27 +18,34 @@ for arg in "$@"; do
 done
 
 if [[ ! -d "$SITEDIR" ]]; then
-    echo "$SITEDIR does not exist or is not directory!"
+    echo "=== $SITEDIR does not exist or is not directory!"
     exit 1
 fi
 
-echo "Compiling the site."
+echo "=== Compiling the site."
 
 if [[ -n "$VERBOSE" ]]; then
-    runhaskell main.hs rebuild
+    runhaskell main.hs rebuil 
 else
     runhaskell main.hs rebuild >/dev/null
+fi
+if [[ "$?" != "0" ]]; then 
+    echo "=== Compilation failed" 
+    exit 1
 fi
 
 cp -r _site/* "$SITEDIR"
 
-echo "Done compiling."
+echo "=== Done compiling."
 
 if [[ "$1" == "-p" ]]; then
-    echo "Pushing the site"
+    echo "=== Redeploying the site"
     cd "$SITEDIR"
+    echo "=== Adding... "
     git add .
+    echo "=== Committing... "
     git commit -am "Site update"
+    echo "=== Pushing... "
     git push
-    echo "Done."
+    echo "=== Done."
 fi
