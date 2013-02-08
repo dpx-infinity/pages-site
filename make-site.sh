@@ -38,7 +38,7 @@ cp -r _site/* "$SITEDIR"
 
 echo "=== Done compiling."
 
-if [[ "$1" == "-p" ]]; then
+if [[ "$DO_PUSH" == "yes" ]]; then
     echo "=== Redeploying the site"
     cd "$SITEDIR"
     echo "=== Adding... "
