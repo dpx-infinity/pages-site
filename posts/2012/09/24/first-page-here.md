@@ -1,6 +1,7 @@
 ---
 title: First page here
 date: 24/09/2012
+tags: general
 ord: 1
 ---
 

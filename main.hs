@@ -2,14 +2,20 @@
 
 module Main where
 
-import Text.Pandoc (ParserState, WriterOptions(..))           
-import Data.Monoid
-import Control.Arrow
-import Hakyll
-import Hakyll.Core.Util.Arrow
-import Data.List.Split (splitOn)
+import qualified Data.Map as M
+import Data.Function
 import Data.List
+import Data.Monoid
+import Control.Applicative
+import Control.Arrow
+import Control.Monad
 import System.IO.Unsafe
+import Text.Printf (printf)
+
+import Text.Pandoc.Options (WriterOptions(..), ReaderOptions(..))
+import Hakyll
+import Hakyll.Web.Pandoc
+import Hakyll.Core.Util.String
 
 p :: (Show a) => a -> a
 p x = unsafePerformIO $ print x >> return x
@@ -17,8 +23,8 @@ p x = unsafePerformIO $ print x >> return x
 ps ++> f = mapM_ (\p -> match p f) ps
 
 -- Custom parser state for page reader.
-parserState :: ParserState
-parserState = defaultHakyllParserState
+readerOptions :: ReaderOptions
+readerOptions = defaultHakyllReaderOptions
 
 -- Custom writer options for page generator.
 writerOptions :: WriterOptions 
@@ -27,144 +33,155 @@ writerOptions = defaultHakyllWriterOptions {
 }
 
 -- A number of recent posts to show.
-recentPostNumber :: Int
-recentPostNumber = 8
+recentPostsNumber :: Int
+recentPostsNumber = 8
 
 -- Sorts post pages by their path and possibly ordering field in ascending order.
-oldestFirst :: [Page a] -> [Page a]
-oldestFirst = sortBy compareDates
+oldestFirst :: (Functor m, MonadMetadata m) => [Item a] -> m [Item a]
+oldestFirst items =
+    map fst <$> sortBy compareDates <$> zip items <$> mapM (getMetadata . itemIdentifier) items
     where
-        pagePath = getField "path"
-        pageOrd p = case getFieldMaybe "ord" p of
-            Just ord -> ord
-            Nothing  -> "0"
+        pagePath = toFilePath . itemIdentifier
+        pageOrd = M.findWithDefault "0" "ord"
 
-        compareDates p1 p2 =
-            let (path1, ord1) = (pagePath p1, pageOrd p1)
-                (path2, ord2) = (pagePath p2, pageOrd p2)
-                f1@[_, y1, m1, d1, name1, o1] = splitOn "/" path1 ++ [ord1]
-                f2@[_, y2, m2, d2, name2, o2] = splitOn "/" path2 ++ [ord2]
+        compareDates (i1, meta1) (i2, meta2) =
+            let (path1, ord1) = (pagePath i1, pageOrd meta1)
+                (path2, ord2) = (pagePath i2, pageOrd meta2)
+                f1@[_, y1, m1, d1, name1, o1] = splitAll "/" path1 ++ [ord1]
+                f2@[_, y2, m2, d2, name2, o2] = splitAll "/" path2 ++ [ord2]
             in compare f1 f2
 
 -- Sorts post pages by their path and possibly ordering field in descending order.
-newestFirst :: [Page a] -> [Page a]
-newestFirst = reverse . oldestFirst
+newestFirst :: (MonadMetadata m, Functor m) => [Item a] -> m [Item a]
+newestFirst = fmap reverse . oldestFirst
+
+renderPostTags :: (String -> String -> String)
+               -- ^ Generate HTML representation: tag, url -> html
+               -> ([String] -> String)
+               -- ^ Concatenate several tags
+               -> Tags
+               -- ^ Tags metadata
+               -> [String]
+               -- ^ Tags for the post               
+               -> Compiler String
+               -- ^ Resulting compiler
+renderPostTags generate concatenate tags postTags = do
+    postTagsInfo <- fmap (filter ((`elem` postTags) . fst)) . forM (tagsMap tags) $ \(tag, ids) -> do
+        tagPageRoute <- getRoute $ tagsMakeId tags tag  -- future url
+        let tagUrl = toUrl $ maybe "/" id tagPageRoute
+        return (tag, tagUrl)
+    return $ concatenate $ map (uncurry generate) postTagsInfo
+    
 
 main :: IO ()
 main = hakyll $ do
+    -- Identity rule, copy as is
+    let copy = route idRoute >> compile copyFileCompiler
+    
     -- Favicon
-    ["favicon.ico"]       
-        ++> copy
+    ["favicon.ico"] ++> copy
+    
     -- Images
-    ["images/**"]         
-        ++> copy
+    ["images/**"] ++> copy
+    
     -- Static files
-    ["static/**"]         
-        ++> copy
+    ["static/**"] ++> copy
+        
     -- Javascript files
-    ["js/**"]             
-        ++> copy
+    ["js/**"] ++> copy
+        
     -- CSS
-    ["styles/*.css"]      
-        ++> css
+    ["styles/*"] ++> do
+        route idRoute
+        compile compressCssCompiler
+    
     -- Templates
-    ["templates/*"]       
-        ++> templates
+    ["templates/*"] ++> compile templateCompiler
+    
+    -- Default context
+    let defaultContext = mconcat [ bodyField "body"
+                                 , metadataField
+                                 , urlField "url"
+                                 , pathField "path"
+                                 ]
+    
     -- Posts
-    ["posts/**"]          
-        ++> posts
+    ["posts/**"] ++> do
+        route $ setExtension "html"
+        compile $
+            pandocCompilerWith readerOptions writerOptions
+            >>= saveSnapshot "postBody"
+            >>= loadAndApplyTemplate "templates/post.html" defaultContext
+            >>= loadAndApplyTemplate "templates/default.html" defaultContext
+            >>= relativizeUrls        
+        
     -- Toplevel
-    ["*.md", "*.html", "*.lhs"]
-        ++> toplevel
+    ["*.md", "*.html", "*.lhs"] ++> do
+        route $ setExtension "html"
+        compile $ do
+            pandocCompilerWith readerOptions writerOptions
+            >>= loadAndApplyTemplate "templates/default.html" defaultContext
+            >>= relativizeUrls
+            
+    -- Prepare tags metainformation
+    tags <- buildTags "posts/**" (fromCapture "tags/*")
+
+    -- Bind tags metainfo-dependent functions
+    let
+        smallPostTagListField name = field name $ \item -> do
+            getTags (itemIdentifier item) >>= renderSmallPostTagList
+
+        renderSmallPostTagList =
+            renderPostTags (renderClassedUrl "small-tag") (intercalate ", ") tags
+        
+        fullPostsList n = do
+            postTemplate <- loadBody "templates/post.html"
+            posts <- (return . take n <=< oldestFirst) =<< loadAllSnapshots "posts/**" "postBody"
+            applyTemplateList postTemplate defaultContext posts
+
+        allDatedPostTitlesList = do
+            postItemTemplate <- loadBody "templates/dated-post-item.html"
+            posts <- oldestFirst =<< loadAllSnapshots "posts/**" "postBody"
+            applyTemplateList postItemTemplate (smallPostTagListField "tags" <> defaultContext) posts
+
+    -- The body will be executed for each tag with matching pattern; corresponding file
+    -- will be created
+    -- Here we have to create pages for each tag
+    tagsRules tags $ \tag pattern -> do
+        return ()
 
     -- Generate index file
-    create ["index.html"] indexFile
+    create ["index.html"] $ do
+        route idRoute
+        compile $ do
+            -- Load a number of rendered posts and store them in the context
+            indexPagePosts <- fullPostsList recentPostsNumber
+            let indexContext = constField "posts" indexPagePosts <> defaultContext
 
-    -- Generate posts list file
-    create ["posts.html"] postsFile
+            -- Render main page
+            makeItem ""
+                >>= loadAndApplyTemplate "templates/index.html" indexContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls    
+
+    -- Generate all posts list file
+    create ["posts.html"] $ do
+        route idRoute
+        compile $ do
+            -- Load a list of posts and store it in the context
+            postsPagePosts <- allDatedPostTitlesList
+            let postsContext = constField "posts" postsPagePosts <> defaultContext
+
+            -- Render posts page
+            makeItem ""
+                >>= loadAndApplyTemplate "templates/posts.html" postsContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls
+        
 
     where
-        css = route (setExtension "css") >> compile compressCssCompiler
-
-        copy = route idRoute >> compile copyFileCompiler
-
-        templates = compile templateCompiler
-
-        --- Tags
-
-        tags <- buildTags "posts/**" (fromCapture "tags/*")
-
-        -- The body will be executed for each tag with matching pattern; corresponding file
-        -- will be created
-        tagsRules $ \tag pattern -> do
-            return ()
-
-        --- Each post context
-
-        postContext = mconcat $ [ bodyField "body"
-                                , bodyField "postBody"
-                                , metadataField
-                                , urlField "url"
-                                , pathField "path"
-                                ]
-
-        --- Post files
-
-        posts = do
-            route $ setExtension "html"
-            compile $ do
-                post <- pandocCompilerWith parserState writerOptions
-                return . copyBodyToField "postBody"   -- Save original body to metadata to extract it in other pages
-                >>= applyTemplateCompiler "templates/post.html"
-                >>= applyTemplateCompiler "templates/default.html"
-                >>= relativizeUrlsCompiler
-
-        --- Different top-level pages
-
-        toplevel = do
-            route $ setExtension "html"
-            compile $ pageCompilerWithFields parserState writerOptions id toplevelFields
-                >>= loadAndApplyTemplate "templates/default.html"
-                >>= relativizeUrlsCompiler
-
-        toplevelFields = smallRecentPostsList
-
-        --- Index file definitions
-
-        indexFile = constA mempty
-            >>= indexFields
-            >>= applyTemplateCompiler "templates/index.html"
-            >>= applyTemplateCompiler "templates/default.html"
-            >>= relativizeUrlsCompiler
-
-        indexFields = smallRecentPostsList 
-            >>= bigRecentPostsList
-
-        --- Posts file definition
-
-        postsFile = constA mempty
-            >>= postsFields
-            >>= applyTemplateCompiler "templates/posts.html"
-            >>= applyTemplateCompiler "templates/default.html"
-            >>= relativizeUrlsCompiler
-
-        postsFields = fullPostsList
-            >>= smallRecentPostsList
-
-        --- Different post lists
-
-        -- A list of all posts with larger links and with dates
-        fullPostsList =
-            setFieldPageList newestFirst
-                "templates/post-item.html" "posts" "posts/**"
-
-        -- A list of post bodies of recentPostNumber length
-        bigRecentPostsList =
-            setFieldPageList (take recentPostNumber . newestFirst)
-                "templates/post.html" "posts" "posts/**"
-
-        -- A list of posts with smaller links ans without dates
-        smallRecentPostsList =
-            setFieldPageList (take recentPostNumber . newestFirst)
-                "templates/post-item-small.html" "recentPosts" "posts/**"
-
+        --- Simple template function, useful for generating tags
+        renderClassedUrl :: String -> String -> String -> String
+        renderClassedUrl clazz tag url =
+            printf "<a class=\"%s\" href=\"%s\">%s</a>" clazz url tag
+    

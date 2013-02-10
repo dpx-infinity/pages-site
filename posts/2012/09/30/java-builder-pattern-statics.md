@@ -1,6 +1,7 @@
 ---
 title: Builder pattern in Java using static methods
 date: 30/09/2012
+tags: programming, java, patterns
 ---
 
 As you possibly know, Java as a language is not very expressive. However, using its some not very known features it
