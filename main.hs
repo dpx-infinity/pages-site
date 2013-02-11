@@ -132,23 +132,25 @@ main = hakyll $ do
             getTags (itemIdentifier item) >>= renderSmallPostTagList
 
         renderSmallPostTagList =
-            renderPostTags (renderClassedUrl "small-tag") (intercalate ", ") tags
+            renderPostTags (renderClassedUrl "tag-small") (intercalate ", ") tags
         
         fullPostsList n = do
             postTemplate <- loadBody "templates/post.html"
-            posts <- (return . take n <=< oldestFirst) =<< loadAllSnapshots "posts/**" "postBody"
+            posts <- (return . take n <=< newestFirst) =<< loadAllSnapshots "posts/**" "postBody"
             applyTemplateList postTemplate defaultContext posts
 
         allDatedPostTitlesList = do
             postItemTemplate <- loadBody "templates/dated-post-item.html"
-            posts <- oldestFirst =<< loadAllSnapshots "posts/**" "postBody"
+            posts <- newestFirst =<< loadAllSnapshots "posts/**" "postBody"
             applyTemplateList postItemTemplate (smallPostTagListField "tags" <> defaultContext) posts
 
     -- The body will be executed for each tag with matching pattern; corresponding file
     -- will be created
     -- Here we have to create pages for each tag
     tagsRules tags $ \tag pattern -> do
-        return ()
+        route $ setExtension "html"
+        compile $ do
+            makeItem ("" :: String)
 
     -- Generate index file
     create ["index.html"] $ do
@@ -177,7 +179,6 @@ main = hakyll $ do
                 >>= loadAndApplyTemplate "templates/posts.html" postsContext
                 >>= loadAndApplyTemplate "templates/default.html" defaultContext
                 >>= relativizeUrls
-        
 
     where
         --- Simple template function, useful for generating tags

@@ -50,7 +50,6 @@ div.container {
 
 div.index-post-list {
     float: right;
-    padding-right: 8px;
     width: 800px;
 }   
 
@@ -107,5 +106,18 @@ span.post-date {
 }
 
 .date-field {
+    font-size: 80%;
+}
+
+a.post-link-small {
+    margin-left: 0.4em;
+   margin-right: 0.4em;
+}
+
+span.date-small {
+    font-size: 80%;
+}
+
+a.tag-small {
     font-size: 80%;
 }
