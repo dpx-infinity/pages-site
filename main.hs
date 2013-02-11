@@ -78,18 +78,11 @@ main = hakyll $ do
     -- Identity rule, copy as is
     let copy = route idRoute >> compile copyFileCompiler
     
-    -- Favicon
-    ["favicon.ico"] ++> copy
-    
-    -- Images
-    ["images/**"] ++> copy
-    
     -- Static files
-    ["static/**"] ++> copy
-        
-    -- Javascript files
-    ["js/**"] ++> copy
-        
+    ["favicon.ico", "images/**", "static/**", "js/**"] ++> do
+        route idRoute
+        compile copyFileCompiler
+    
     -- CSS
     ["styles/*"] ++> do
         route idRoute
@@ -124,7 +117,7 @@ main = hakyll $ do
             >>= relativizeUrls
             
     -- Prepare tags metainformation
-    tags <- buildTags "posts/**" (fromCapture "tags/*")
+    tags <- buildTags "posts/**" (fromCapture "tags/*.html")
 
     -- Bind tags metainfo-dependent functions
     let
@@ -139,10 +132,17 @@ main = hakyll $ do
             posts <- (return . take n <=< newestFirst) =<< loadAllSnapshots "posts/**" "postBody"
             applyTemplateList postTemplate defaultContext posts
 
-        allDatedPostTitlesList = do
+        postTitlesWithDateWithTagsList postsPattern = do
             postItemTemplate <- loadBody "templates/dated-post-item.html"
-            posts <- newestFirst =<< loadAllSnapshots "posts/**" "postBody"
+            posts <- newestFirst =<< loadAllSnapshots postsPattern "postBody"
             applyTemplateList postItemTemplate (smallPostTagListField "tags" <> defaultContext) posts
+
+        allPostPostTitlesWithDateWithTagsList = postTitlesWithDateList "posts/**"
+
+        postTitlesWithDateList postsPattern = do
+            postItemTemplate <- loadBody "templates/dated-post-item.html"  -- TODO: use another template
+            posts <- newestFirst =<< loadAllSnapshots postsPattern "postBody"
+            applyTemplateList postItemTemplate (constField "tags" "" <> defaultContext) posts
 
     -- The body will be executed for each tag with matching pattern; corresponding file
     -- will be created
@@ -150,7 +150,10 @@ main = hakyll $ do
     tagsRules tags $ \tag pattern -> do
         route $ setExtension "html"
         compile $ do
-            makeItem ("" :: String)
+            tagPagePosts <- postTitlesWithDateList pattern
+            let tagContext = constField "posts" tagPagePosts <> defaultContext
+            makeItem ""
+                >>= 
 
     -- Generate index file
     create ["index.html"] $ do
@@ -171,7 +174,7 @@ main = hakyll $ do
         route idRoute
         compile $ do
             -- Load a list of posts and store it in the context
-            postsPagePosts <- allDatedPostTitlesList
+            postsPagePosts <- allPostTitlesWithDateWithTagsList
             let postsContext = constField "posts" postsPagePosts <> defaultContext
 
             -- Render posts page
