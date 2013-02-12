@@ -55,6 +55,9 @@ oldestFirst items =
 newestFirst :: (MonadMetadata m, Functor m) => [Item a] -> m [Item a]
 newestFirst = fmap reverse . oldestFirst
 
+-- | This function is very similar to 'renderTags'; it renders a list of tags too,
+-- but not all of them, only specified ones
+-- Useful for rendering tags for single post
 renderPostTags :: (String -> String -> String)
                -- ^ Generate HTML representation: tag, url -> html
                -> ([String] -> String)
@@ -98,16 +101,6 @@ main = hakyll $ do
                                  , pathField "path"
                                  ]
     
-    -- Posts
-    ["posts/**"] ++> do
-        route $ setExtension "html"
-        compile $
-            pandocCompilerWith readerOptions writerOptions
-            >>= saveSnapshot "postBody"
-            >>= loadAndApplyTemplate "templates/post.html" defaultContext
-            >>= loadAndApplyTemplate "templates/default.html" defaultContext
-            >>= relativizeUrls        
-        
     -- Toplevel
     ["*.md", "*.html", "*.lhs"] ++> do
         route $ setExtension "html"
@@ -130,14 +123,14 @@ main = hakyll $ do
         fullPostsList n = do
             postTemplate <- loadBody "templates/post.html"
             posts <- (return . take n <=< newestFirst) =<< loadAllSnapshots "posts/**" "postBody"
-            applyTemplateList postTemplate defaultContext posts
+            applyTemplateList postTemplate (smallPostTagListField "tags" <> defaultContext) posts
 
         postTitlesWithDateWithTagsList postsPattern = do
             postItemTemplate <- loadBody "templates/dated-post-item.html"
             posts <- newestFirst =<< loadAllSnapshots postsPattern "postBody"
             applyTemplateList postItemTemplate (smallPostTagListField "tags" <> defaultContext) posts
 
-        allPostPostTitlesWithDateWithTagsList = postTitlesWithDateList "posts/**"
+        allPostTitlesWithDateWithTagsList = postTitlesWithDateWithTagsList "posts/**"
 
         postTitlesWithDateList postsPattern = do
             postItemTemplate <- loadBody "templates/dated-post-item.html"  -- TODO: use another template
@@ -150,10 +143,41 @@ main = hakyll $ do
     tagsRules tags $ \tag pattern -> do
         route $ setExtension "html"
         compile $ do
-            tagPagePosts <- postTitlesWithDateList pattern
-            let tagContext = constField "posts" tagPagePosts <> defaultContext
+            tagPagePosts <- postTitlesWithDateWithTagsList pattern
+            let tagContext = constField "posts" tagPagePosts
+                             <> constField "title" ("Posts tagged " ++ tag)
+                             <> defaultContext
+            
             makeItem ""
-                >>= 
+                >>= loadAndApplyTemplate "templates/posts.html" tagContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls
+
+    -- Tags list page
+    create ["tags.html"] $ do
+        route idRoute
+        compile $ do
+            tagsList <- renderTags fullTagsListRenderer fullTagsListJoiner tags
+            -- I know, it is weird to save tags list under "posts" variable,
+            -- but I'm too lazy to create new template only for tags
+            let tagsContext = constField "posts" tagsList  
+                              <> constField "title" "All tags"
+                              <> defaultContext
+
+            makeItem ""
+                >>= loadAndApplyTemplate "templates/posts.html" tagsContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls
+
+    -- Posts
+    ["posts/**"] ++> do
+        route $ setExtension "html"
+        compile $ do
+            pandocCompilerWith readerOptions writerOptions
+            >>= saveSnapshot "postBody"
+            >>= loadAndApplyTemplate "templates/post.html" (smallPostTagListField "tags" <> defaultContext)
+            >>= loadAndApplyTemplate "templates/default.html" defaultContext
+            >>= relativizeUrls
 
     -- Generate index file
     create ["index.html"] $ do
@@ -175,7 +199,9 @@ main = hakyll $ do
         compile $ do
             -- Load a list of posts and store it in the context
             postsPagePosts <- allPostTitlesWithDateWithTagsList
-            let postsContext = constField "posts" postsPagePosts <> defaultContext
+            let postsContext = constField "posts" postsPagePosts
+                               <> constField "title" "All posts"
+                               <> defaultContext
 
             -- Render posts page
             makeItem ""
@@ -188,4 +214,9 @@ main = hakyll $ do
         renderClassedUrl :: String -> String -> String -> String
         renderClassedUrl clazz tag url =
             printf "<a class=\"%s\" href=\"%s\">%s</a>" clazz url tag
-    
+        
+        --- Render functions for tags list
+        fullTagsListRenderer tag url count _ _ =
+            printf "<div class=\"link-small-div\">%s</div>" $
+                renderClassedUrl "tag-normal" tag url ++ printf " (%d)" count
+        fullTagsListJoiner = intercalate "\n"
