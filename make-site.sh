@@ -22,10 +22,10 @@ if [[ ! -d "$SITEDIR" ]]; then
     exit 1
 fi
 
-echo "=== Compiling the site."
+echo "=== Compiling the site"
 
 if [[ -n "$VERBOSE" ]]; then
-    runhaskell main.hs rebuil 
+    runhaskell main.hs rebuild
 else
     runhaskell main.hs rebuild >/dev/null
 fi
@@ -33,6 +33,12 @@ if [[ "$?" != "0" ]]; then
     echo "=== Compilation failed" 
     exit 1
 fi
+
+echo "=== Clearing old site directory"
+
+rm -r "$SITEDIR"/*
+
+echo "=== Copying generated files to the site repo"
 
 cp -r _site/* "$SITEDIR"
 
@@ -43,9 +49,10 @@ if [[ "$DO_PUSH" == "yes" ]]; then
     cd "$SITEDIR"
     echo "=== Adding... "
     git add .
+    git add -u .
     echo "=== Committing... "
     git commit -am "Site update"
     echo "=== Pushing... "
     git push
-    echo "=== Done."
+    echo "=== Done"
 fi
