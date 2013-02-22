@@ -55,6 +55,9 @@ oldestFirst items =
 newestFirst :: (MonadMetadata m, Functor m) => [Item a] -> m [Item a]
 newestFirst = fmap reverse . oldestFirst
 
+-- | This function is very similar to 'renderTags'; it renders a list of tags too,
+-- but not all of them, only specified ones
+-- Useful for rendering tags for single post
 renderPostTags :: (String -> String -> String)
                -- ^ Generate HTML representation: tag, url -> html
                -> ([String] -> String)
@@ -78,18 +81,11 @@ main = hakyll $ do
     -- Identity rule, copy as is
     let copy = route idRoute >> compile copyFileCompiler
     
-    -- Favicon
-    ["favicon.ico"] ++> copy
-    
-    -- Images
-    ["images/**"] ++> copy
-    
     -- Static files
-    ["static/**"] ++> copy
-        
-    -- Javascript files
-    ["js/**"] ++> copy
-        
+    ["favicon.ico", "images/**", "static/**", "js/**"] ++> do
+        route idRoute
+        compile copyFileCompiler
+    
     -- CSS
     ["styles/*"] ++> do
         route idRoute
@@ -105,16 +101,6 @@ main = hakyll $ do
                                  , pathField "path"
                                  ]
     
-    -- Posts
-    ["posts/**"] ++> do
-        route $ setExtension "html"
-        compile $
-            pandocCompilerWith readerOptions writerOptions
-            >>= saveSnapshot "postBody"
-            >>= loadAndApplyTemplate "templates/post.html" defaultContext
-            >>= loadAndApplyTemplate "templates/default.html" defaultContext
-            >>= relativizeUrls        
-        
     -- Toplevel
     ["*.md", "*.html", "*.lhs"] ++> do
         route $ setExtension "html"
@@ -124,7 +110,7 @@ main = hakyll $ do
             >>= relativizeUrls
             
     -- Prepare tags metainformation
-    tags <- buildTags "posts/**" (fromCapture "tags/*")
+    tags <- buildTags "posts/**" (fromCapture "tags/*.html")
 
     -- Bind tags metainfo-dependent functions
     let
@@ -137,12 +123,19 @@ main = hakyll $ do
         fullPostsList n = do
             postTemplate <- loadBody "templates/post.html"
             posts <- (return . take n <=< newestFirst) =<< loadAllSnapshots "posts/**" "postBody"
-            applyTemplateList postTemplate defaultContext posts
+            applyTemplateList postTemplate (smallPostTagListField "tags" <> defaultContext) posts
 
-        allDatedPostTitlesList = do
+        postTitlesWithDateWithTagsList postsPattern = do
             postItemTemplate <- loadBody "templates/dated-post-item.html"
-            posts <- newestFirst =<< loadAllSnapshots "posts/**" "postBody"
+            posts <- newestFirst =<< loadAllSnapshots postsPattern "postBody"
             applyTemplateList postItemTemplate (smallPostTagListField "tags" <> defaultContext) posts
+
+        allPostTitlesWithDateWithTagsList = postTitlesWithDateWithTagsList "posts/**"
+
+        postTitlesWithDateList postsPattern = do
+            postItemTemplate <- loadBody "templates/dated-post-item.html"  -- TODO: use another template
+            posts <- newestFirst =<< loadAllSnapshots postsPattern "postBody"
+            applyTemplateList postItemTemplate (constField "tags" "" <> defaultContext) posts
 
     -- The body will be executed for each tag with matching pattern; corresponding file
     -- will be created
@@ -150,7 +143,41 @@ main = hakyll $ do
     tagsRules tags $ \tag pattern -> do
         route $ setExtension "html"
         compile $ do
-            makeItem ("" :: String)
+            tagPagePosts <- postTitlesWithDateWithTagsList pattern
+            let tagContext = constField "posts" tagPagePosts
+                             <> constField "title" ("Posts tagged " ++ tag)
+                             <> defaultContext
+            
+            makeItem ""
+                >>= loadAndApplyTemplate "templates/posts.html" tagContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls
+
+    -- Tags list page
+    create ["tags.html"] $ do
+        route idRoute
+        compile $ do
+            tagsList <- renderTags fullTagsListRenderer fullTagsListJoiner tags
+            -- I know, it is weird to save tags list under "posts" variable,
+            -- but I'm too lazy to create new template only for tags
+            let tagsContext = constField "posts" tagsList  
+                              <> constField "title" "All tags"
+                              <> defaultContext
+
+            makeItem ""
+                >>= loadAndApplyTemplate "templates/posts.html" tagsContext
+                >>= loadAndApplyTemplate "templates/default.html" defaultContext
+                >>= relativizeUrls
+
+    -- Posts
+    ["posts/**"] ++> do
+        route $ setExtension "html"
+        compile $ do
+            pandocCompilerWith readerOptions writerOptions
+            >>= saveSnapshot "postBody"
+            >>= loadAndApplyTemplate "templates/post.html" (smallPostTagListField "tags" <> defaultContext)
+            >>= loadAndApplyTemplate "templates/default.html" defaultContext
+            >>= relativizeUrls
 
     -- Generate index file
     create ["index.html"] $ do
@@ -171,8 +198,10 @@ main = hakyll $ do
         route idRoute
         compile $ do
             -- Load a list of posts and store it in the context
-            postsPagePosts <- allDatedPostTitlesList
-            let postsContext = constField "posts" postsPagePosts <> defaultContext
+            postsPagePosts <- allPostTitlesWithDateWithTagsList
+            let postsContext = constField "posts" postsPagePosts
+                               <> constField "title" "All posts"
+                               <> defaultContext
 
             -- Render posts page
             makeItem ""
@@ -185,4 +214,9 @@ main = hakyll $ do
         renderClassedUrl :: String -> String -> String -> String
         renderClassedUrl clazz tag url =
             printf "<a class=\"%s\" href=\"%s\">%s</a>" clazz url tag
-    
+        
+        --- Render functions for tags list
+        fullTagsListRenderer tag url count _ _ =
+            printf "<div class=\"link-small-div\">%s</div>" $
+                renderClassedUrl "tag-normal" tag url ++ printf " (%d)" count
+        fullTagsListJoiner = intercalate "\n"
