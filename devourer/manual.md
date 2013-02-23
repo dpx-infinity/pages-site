@@ -55,7 +55,8 @@ integrate nicely with JavaBean convention. Digester supports loading rules from 
 allows dynamic reconfiguration of the parsing process (Devourer may support something like this one
 day). Digester (at least v3) supports plugins, which are used to dynamically reconfigure digesting
 rules during the processing. Digester support for XML namespaces is much better than Devourer's
-(this is something I will try to fix in the nearest future).
+(this is something I will try to fix in the nearest future). Digester API is stable; Devourer's API
+will evolve, at least during first several versions.
 
 Configuration
 -------------
