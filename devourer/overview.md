@@ -257,6 +257,24 @@ approach to configuration does require some reflection to be used during parsing
 modular approach should be preferred if you need as much performance as possible; however, annotated
 configuration is slightly more readable and understandable.
 
+An object of any class can be regarded as annotated configuration. However, the class of this object
+should be properly annotated for the configuration to work correctly.
+
+Annotated configuration class consists only of methods. These methods must be annotated at least
+with one of the following annotations: `@Before`, `@At`, `@After`. These annotations take single
+string argument which must be correct path inside the XML document. These annotations define the
+type of the action this method represents.
+
+If method has return type other than `void`, it is assumed that the result of this method should be
+pushed on the stack. It will be default stack by default. Using `@PushTo` method annotation allows
+you to specify stack name explicitly.
+
+Annotated methods can have arbitrary number of parameters. They will be injected with different
+objects depending on their types and annotations. The following table describes all possible
+variants of parameters.
+
+
+
 Example
 -------
 
