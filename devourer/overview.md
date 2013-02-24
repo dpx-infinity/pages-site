@@ -66,7 +66,7 @@ API will evolve, at least during first several versions.
 Devourer workflow overview, basic concepts
 ------------------------------------------
 
-*** Paths
+### Paths
 
 As I said, Devourer is a tool for XML processing. Essentially it is a wrapper over streaming XML
 parser which can be configured to execute arbitrary code (each piece of which is called **action**)
@@ -110,7 +110,7 @@ There are exactly three elements which match `/root/subtree/node` path and two e
 `/root/subtree` path. If some actions are configured on these paths, they will be executed one time
 for each one of the corresponding elements.
 
-*** Stacks
+### Stacks
 
 To assist actions in holding their state, for example, parts of the object being constructed,
 Devourer provides `Stacks` object. `Stacks` is a collection of stacks (which is not hard to
@@ -130,7 +130,7 @@ Devourer since it never uses single instance of `Stacks` from multiple threads, 
 returned from the `parse()` method to your code, you should know that using it from multiple threads
 is a bad idea.
 
-*** Action types
+### Action types
 
 XML has fairly complex structure when you look into its details, but Devourer tries to abstract all
 these details into three types of events you can encounter. These types of events correspond to
@@ -187,7 +187,7 @@ mapping from paths inside XML document to series of actions which should be exec
 which are located at the specified path. There are two variants of configuration objects, equivalent
 in power but different in usage: *modules* and *annotated objects*.
 
-*** Modular configuration
+### Modular configuration
 
 Modular configuration looks like [Google Guice](http://code.google.com/p/google-guice/) or Digester
 modules. It provides very lightweight DSL to help you define actions which should be taken on
@@ -249,7 +249,7 @@ It is also possible to add actions on the same path using multiple `on()` clause
 have any special effects, and the configuration behave exactly as if these actions were defined in
 the same `on()` clause.
 
-*** Annotated configuration
+### Annotated configuration
 
 Devourer also supports annotated configuration, which is heavily inspired by Spring Web MVC
 controllers. A class can be annotated in such way that its methods will be regarded as actions. This
