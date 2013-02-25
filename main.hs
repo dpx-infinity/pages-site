@@ -96,11 +96,12 @@ main = hakyll $ do
     
     -- Default context
     let defaultContext = mconcat [ bodyField "body"
+                                 , constField "globalTitle" "Boring programmer's notes"
                                  , metadataField
                                  , urlField "url"
                                  , pathField "path"
                                  ]
-    
+
     -- Toplevel
     ["*.md", "*.html", "*.lhs"] ++> do
         route $ setExtension "html"
@@ -208,6 +209,16 @@ main = hakyll $ do
                 >>= loadAndApplyTemplate "templates/posts.html" postsContext
                 >>= loadAndApplyTemplate "templates/default.html" defaultContext
                 >>= relativizeUrls
+
+    -- Devourer manual
+    ["devourer/*"] ++> do
+        route $ setExtension "html"
+        compile $ do
+            pandocCompilerWith readerOptions writerOptions
+            >>= loadAndApplyTemplate "templates/devourer.html" defaultContext
+            >>= loadAndApplyTemplate "templates/default.html" (constField "globalTitle" "Devourer library" <>
+                                                               defaultContext)
+            >>= relativizeUrls
 
     where
         --- Simple template function, useful for generating tags

@@ -1,8 +1,8 @@
 ---
 title: Devourer overview
-date: 2013-02-23
+date: 23/02/2013
 version: 1
-devourer-version: 0.1
+devourerVersion: 0.1
 ---
 
 This document is an official manual for **Devourer XML processing library**. This page will be
@@ -16,6 +16,17 @@ objects. To hold intermediate state stack data structure is used.
 Devourer is very simple to use. First you create and configure an instance of `Devourer` class and
 then you feed it an XML document. Devourer accepts `InputStream`s, `Reader`s, byte arrays and
 strings. After parsing it produces `Stacks` object which contains results of the processing.
+
+Devourer's source code can be found at Bitbucket:
+<https://bitbucket.org/googolplex/devourer>. Binary release will be available soon at Maven Central:
+
+```xml
+<dependency>
+    <groupId>org.bitbucket.googolplex.devourer</groupId>
+    <artifactId>devourer</artifactId>
+    <version>0.1</version>
+</dependency>
+```
 
 Inspirations
 ------------
@@ -179,8 +190,8 @@ attributes. Usually you use `AttributeContext` to read element attributes.
 
 At-actions also are provided with element content represented as `String`.
 
-Configuration
--------------
+Mapping configuration
+---------------------
 
 Configuration of Devourer is done using an object of certain kind. Configuration object defines a
 mapping from paths inside XML document to series of actions which should be executed on the nodes
@@ -275,7 +286,7 @@ possible variants of parameter types and annotation. In the table `T` means arbi
 the ones listed in the first part of the table.
 
 +-----------------------------------------+-------------------------------------------------------+
-| Parameter type (possibly w/ annotation) | Description of injected value                         |
+| Parameter type (possibly w/ annotation) | Description of the injected value                     |
 +=========================================+=======================================================+
 | `Stacks`                                | Current stacks object                                 |
 +-----------------------------------------+-------------------------------------------------------+
@@ -285,41 +296,44 @@ the ones listed in the first part of the table.
 | annotated with annotations described    |                                                       |
 | below)                                  |                                                       |
 +-----------------------------------------+-------------------------------------------------------+
-| `@Pop` `T`                              | An object from the top of the default stack; the      |
+| `@Pop T`                                | An object from the top of the default stack; the      |
 |                                         | object is removed from the stack; an exception is     |
 |                                         | thrown if the stack is empty                          |
 +-----------------------------------------+-------------------------------------------------------+
-| `@PopFrom(stackName)` `T`               | An object from the top of the specified stack; the    |
+| `@PopFrom(stackName) T`                 | An object from the top of the specified stack; the    |
 |                                         | object is removed from the stack; an exception is     |
 |                                         | thrown if the stack is empty                          |
 +-----------------------------------------+-------------------------------------------------------+
-| `@Peek` `T`                             | An object from the top of the default stack; the      |
+| `@Peek T`                               | An object from the top of the default stack; the      |
 |                                         | object is kept on the stack; an exception is thrown   |
 |                                         | if the stack is empty                                 |
 +-----------------------------------------+-------------------------------------------------------+
-| `@PeekFrom(stackName)` `T`              | An object from the top of the specified stack; the    |
+| `@PeekFrom(stackName) T`                | An object from the top of the specified stack; the    |
 |                                         | object is kept on the stack; an exception is thrown   |
 |                                         | if the stack is empty                                 |
 +-----------------------------------------+-------------------------------------------------------+
-| `@Pop` `Optional<T>`                    | An object from the top of the default stack; the      |
+| `@Pop Optional<T>`                      | An object from the top of the default stack; the      |
 |                                         | object is removed from the stack; absent value is     |
 |                                         | injected if the stack is empty                        |
 +-----------------------------------------+-------------------------------------------------------+
-| `@PopFrom(stackName)` `Optional<T>`     | An object from the top of the specified stack; the    |
+| `@PopFrom(stackName) Optional<T>`       | An object from the top of the specified stack; the    |
 |                                         | object is removed from the stack; absent value is     |
 |                                         | injected if the stack is empty                        |
 +-----------------------------------------+-------------------------------------------------------+
-| `@Peek` `Optional<T>`                   | An object from the top of the default stack; the      |
+| `@Peek Optional<T>`                     | An object from the top of the default stack; the      |
 |                                         | object is kept on the stack; absent value is injected |
 |                                         | if the stack is empty                                 |
 +-----------------------------------------+-------------------------------------------------------+
-| `@PeekFrom(stackName)` `Optional<T>`    | An obejct from the top of the specified stack; the    |
+| `@PeekFrom(stackName) Optional<T>`      | An object from the top of the specified stack; the    |
 |                                         | object is kept on the stack; absent value is injected |
 |                                         | if the stack is empty                                 |
 +-----------------------------------------+-------------------------------------------------------+
 
-`@Pop*` annotations change `Stacks` state. This object is queried exactly in the order of
-stack-manipulating annotations. For example, the following annotated action:
+Any other parameter type/annotation combination is illegal, and corresponding exception will be
+thrown at configuration time.
+
+`@Pop*` annotations change `Stacks` state. This object is queried exactly in the order of parameters
+annotated with stack-manipulating annotations. For example, the following annotated action:
 
 ```java
 @Before(...)
@@ -329,7 +343,7 @@ public void action(@Pop String value1, @Pop int value2, @Peek boolean value3,
 }
 ```
 
-Is equivalent to the following direct stack manipulation:
+Is equivalent to the this direct stack manipulation:
 
 ```java
 @Before(...)
@@ -344,7 +358,7 @@ public void action(Stacks stacks) {
 
 It should be obvious that writing parameters annotated with `@Peek` annotation for the same stack
 several times in a row is pointless, since they all will have the same value. On the other hand,
-several `@Pop`-annotated parameters is perfectly OK.
+having several `@Pop`-annotated parameters is perfectly OK.
 
 Example
 -------
@@ -597,6 +611,32 @@ List<Person> persons = stacks.pop();
 That's it. `persons` will be a list of `Person` objects read from the XML and constructed via actions
 configured in the module.
 
+Operational configuration
+-------------------------
+
+It is possible to configure Devourer behavior using `DevourerConfig` object. These are the things
+you can currently tweak using this configuration:
+
+- enable or disable trimming of leading and trailing whitespaces of element textual content; this is
+  something you usually want to have, so it is enabled by default, however, sometimes you want to
+  turn it off (e.g. when handling CDATA);
+- configure StAX parser directly by setting StAX `XMLInputFactory` properties.
+
+`DevourerConfig` object is usually created using builder class. It looks like this:
+
+```java
+DevourerConfig config = DevourerConfig.builder()
+    .setStripSpaces(false)
+    .setStaxProperty(XMLInputFactory.IS_COALESCING, true)
+    .build();
+```
+
+Then you can supply `DevourerConfig` object as an argument to `Devourer.create()` method:
+
+```java
+Devourer devourer = Devourer.create(config, new PersonModule());
+```
+
 Limitations of the library
 --------------------------
 
@@ -620,4 +660,5 @@ Bugs
 ----
 
 Currently I don't know of any bugs in the library. If you found one, feel free to post it to the
-(Bitbucket issue tracker)[https://bitbucket.org/googolplex/devourer/issues].
+[Bitbucket issue tracker]
+(https://bitbucket.org/googolplex/devourer/issues).

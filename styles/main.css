@@ -4,7 +4,7 @@ html, body {
 
 body {
     font-family: sans;
-    font-size: 85%;
+    font-size: 95%;
     background-color: #FFFFEF;
 }
 
@@ -136,4 +136,13 @@ span.date-small {
 
 a.tag-small {
     font-size: 80%;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 3px;
 }
