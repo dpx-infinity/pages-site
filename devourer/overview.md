@@ -266,14 +266,85 @@ string argument which must be correct path inside the XML document. These annota
 type of the action this method represents.
 
 If method has return type other than `void`, it is assumed that the result of this method should be
-pushed on the stack. It will be default stack by default. Using `@PushTo` method annotation allows
-you to specify stack name explicitly.
+pushed on the stack. `@PushTo` method annotation allows you to specify stack name explicitly. If
+`@PushTo` is not specified, default stack will be used.
 
-Annotated methods can have arbitrary number of parameters. They will be injected with different
-objects depending on their types and annotations. The following table describes all possible
-variants of parameters.
+Annotated methods can have arbitrary number of parameters. During execution they will be injected
+with different objects depending on their types and annotations. The following table describes all
+possible variants of parameter types and annotation. In the table `T` means arbitrary type except
+the ones listed in the first part of the table.
 
++-----------------------------------------+-------------------------------------------------------+
+| Parameter type (possibly w/ annotation) | Description of injected value                         |
++=========================================+=======================================================+
+| `Stacks`                                | Current stacks object                                 |
++-----------------------------------------+-------------------------------------------------------+
+| `AttributeContext` / `ElementContext`   | Current element context                               |
++-----------------------------------------+-------------------------------------------------------+
+| `String` (only in `@At` methods and not | Element textual content                               |
+| annotated with annotations described    |                                                       |
+| below)                                  |                                                       |
++-----------------------------------------+-------------------------------------------------------+
+| `@Pop` `T`                              | An object from the top of the default stack; the      |
+|                                         | object is removed from the stack; an exception is     |
+|                                         | thrown if the stack is empty                          |
++-----------------------------------------+-------------------------------------------------------+
+| `@PopFrom(stackName)` `T`               | An object from the top of the specified stack; the    |
+|                                         | object is removed from the stack; an exception is     |
+|                                         | thrown if the stack is empty                          |
++-----------------------------------------+-------------------------------------------------------+
+| `@Peek` `T`                             | An object from the top of the default stack; the      |
+|                                         | object is kept on the stack; an exception is thrown   |
+|                                         | if the stack is empty                                 |
++-----------------------------------------+-------------------------------------------------------+
+| `@PeekFrom(stackName)` `T`              | An object from the top of the specified stack; the    |
+|                                         | object is kept on the stack; an exception is thrown   |
+|                                         | if the stack is empty                                 |
++-----------------------------------------+-------------------------------------------------------+
+| `@Pop` `Optional<T>`                    | An object from the top of the default stack; the      |
+|                                         | object is removed from the stack; absent value is     |
+|                                         | injected if the stack is empty                        |
++-----------------------------------------+-------------------------------------------------------+
+| `@PopFrom(stackName)` `Optional<T>`     | An object from the top of the specified stack; the    |
+|                                         | object is removed from the stack; absent value is     |
+|                                         | injected if the stack is empty                        |
++-----------------------------------------+-------------------------------------------------------+
+| `@Peek` `Optional<T>`                   | An object from the top of the default stack; the      |
+|                                         | object is kept on the stack; absent value is injected |
+|                                         | if the stack is empty                                 |
++-----------------------------------------+-------------------------------------------------------+
+| `@PeekFrom(stackName)` `Optional<T>`    | An obejct from the top of the specified stack; the    |
+|                                         | object is kept on the stack; absent value is injected |
+|                                         | if the stack is empty                                 |
++-----------------------------------------+-------------------------------------------------------+
 
+`@Pop*` annotations change `Stacks` state. This object is queried exactly in the order of
+stack-manipulating annotations. For example, the following annotated action:
+
+```java
+@Before(...)
+public void action(@Pop String value1, @Pop int value2, @Peek boolean value3,
+                   @Pop boolean value4) {
+    ...
+}
+```
+
+Is equivalent to the following direct stack manipulation:
+
+```java
+@Before(...)
+public void action(Stacks stacks) {
+    String value1 = stacks.pop();
+    int value2 = stacks.pop();
+    boolean value3 = stacks.peek();
+    boolean value4 = stacks.pop();
+    ...
+}
+```
+
+It should be obvious that writing parameters annotated with `@Peek` annotation for the same stack
+several times in a row is pointless, since they all will have the same value. On the other hand,
+several `@Pop`-annotated parameters is perfectly OK.
 
 Example
 -------
@@ -332,73 +403,74 @@ Then the following actions mapping will do the work for you:
 ```java
 public class PersonModule extends AbstractMappingModule {
     @Override
-    public void configure() {
+    protected void configure() {
         on("/persons")
-            .doBefore(new ReactionBefore() {
+            .doBefore(new ActionBefore() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
+                public void act(Stacks stacks, AttributesContext context) {
                     stacks.push(ImmutableList.builder());
                 }
             })
-            .doAfter(new ReactionAfter() {
+            .doAfter(new ActionAfter() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
+                public void act(Stacks stacks, AttributesContext context) {
                     ImmutableList.Builder<Person> builder = stacks.pop();
                     stacks.push(builder.build());
                 }
             });
 
         on("/persons/person")
-            .doBefore(new ReactionBefore() {
+            .doBefore(new ActionBefore() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
-                    stacks.push("person", context.attribute("id").get());
+                public void act(Stacks stacks, AttributesContext context) {
+                    stacks.get("person").push(context.attribute("id").get());
                 }
             })
-            .doAfter(new ReactionAfter() {
+            .doAfter(new ActionAfter() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
-                    String name = stacks.pop("person");
-                    int id = Integer.parseInt(stacks.<String>pop("person"));
-                    ImmutableList.Builder<Login> loginsBuilder = stacks.pop("logins");
+                public void act(Stacks stacks, AttributesContext context) {
+                    String name = stacks.get("person").pop();
+                    int id = Integer.parseInt(stacks.get("person").<String>pop());
+                    List<Login> logins = stacks.get("logins").<List<Login>>tryPop().or(ImmutableList.<Login>of());
+
                     ImmutableList.Builder<Person> personsBuilder = stacks.peek();
-                    personsBuilder.add(new Person(id, name, loginsBuilder.build()));
+                    personsBuilder.add(new Person(id, name, logins));
                 }
             });
 
         on("/persons/person/name")
-            .doAt(new ReactionAt() {
+            .doAt(new ActionAt() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context, String body) {
-                    stacks.push("person", body);
+                public void act(Stacks stacks, AttributesContext context, String body) {
+                    stacks.get("person").push(body);
                 }
             });
 
         on("/persons/person/logins")
-            .doBefore(new ReactionBefore() {
+            .doBefore(new ActionBefore() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
-                    stacks.push("logins", ImmutableList.builder());
+                public void act(Stacks stacks, AttributesContext context) {
+                    stacks.get("logins").push(ImmutableList.builder());
                 }
             })
-            .doAfter(new ReactionAfter() {
+            .doAfter(new ActionAfter() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context) {
-                    stacks.push(
-                        "logins", 
-                        stacks.<ImmutableList.Builder<Login>>pop("logins").build()
+                public void act(Stacks stacks, AttributesContext context) {
+                    stacks.get("logins").push(
+                        stacks.get("logins").<ImmutableList.Builder<Login>>pop().build()
                     );
                 }
             });
 
         on("/persons/person/logins/login")
-            .doAt(new ReactionAt() {
+            .doAt(new ActionAt() {
                 @Override
-                public void react(Stacks stacks, AttributesContext context, String body) {
-                    stacks.<ImmutableList.Builder<Login>>peek("logins")
+                public void act(Stacks stacks, AttributesContext context, String body) {
+                    stacks.get("logins").<ImmutableList.Builder<Login>>peek()
                           .add(new Login(context.attribute("site").get(), body));
                 }
             });
+
     }
 }
 ```
@@ -408,7 +480,7 @@ folding hides most of the verboseness. Furthermore, with Java 8 there will be no
 This is how the module would look in Java 8:
 
 ```java
-public class PersonModule extends AbstractMappingModule {
+public class PersonModule2 extends AbstractMappingModule {
     @Override
     protected void configure() {
         on("/persons")
@@ -419,35 +491,37 @@ public class PersonModule extends AbstractMappingModule {
             });
 
         on("/persons/person")
-            .doBefore((stacks, context) -> stacks.push("person", context.attribute("id").get()))
+            .doBefore((stacks, context) -> stacks.get("person").push(context.attribute("id").get()))
             .doAfter((stacks, context) -> {
-                String name = stacks.pop("person");
-                int id = Integer.parseInt(stacks.<String>pop("person"));
-                ImmutableList.Builder<Login> loginsBuilder = stacks.pop("logins");
+                String name = stacks.get("person").pop();
+                int id = Integer.parseInt(stacks.get("person").<String>pop());
+                List<Login> logins = stacks.get("logins").<List<Login>>tryPop().or(ImmutableList.<Login>of());
+
                 ImmutableList.Builder<Person> personsBuilder = stacks.peek();
-                personsBuilder.add(new Person(id, name, loginsBuilder.build()));
+                personsBuilder.add(new Person(id, name, logins));
             });
 
         on("/persons/person/name")
-            .doAt((stacks, context, body) -> stacks.push("person", body));
+            .doAt((stacks, context, body) -> stacks.get("person").push(body));
 
         on("/persons/person/logins")
-            .doBefore((stacks, context) -> stacks.push("logins", ImmutableList.builder()))
-            .doAfter((stacks, context) -> {
-                stacks.push(
-                    "logins",
-                    stacks.<ImmutableList.Builder<Login>>pop("logins").build()
-                );
-            });
+            .doBefore((stacks, context) -> stacks.get("logins").push(ImmutableList.builder()))
+            .doAfter((stacks, context) -> stacks.get("logins").push(
+                stacks.get("logins").<ImmutableList.Builder<Login>>pop().build()
+            ));
 
         on("/persons/person/logins/login")
             .doAt((stacks, context, body) -> {
-                stacks.<ImmutableList.Builder<Login>>peek("logins")
+                stacks.get("logins").<ImmutableList.Builder<Login>>peek()
                       .add(new Login(context.attribute("site").get(), body));
             });
     }
 }
 ```
+
+The only boilerplate code here is repeated use of `stacks`, `context` and `body` lambda parameters,
+and even that is possible to alleviate using default methods provided by Java 8. I may possibly add
+special Java 8 support library for this later.
 
 In fact, IntelliJ IDEA folds code in such way that you see it very similar to this even with Java
 6/7 language level.
@@ -504,13 +578,17 @@ public class PersonAnnotatedConfig {
         return personsBuilder.build();
     }
 }
-
 ```
+
+As you can see, annotated configuration reads slightly easier that modular configuration. There are
+no explicit `Stacks` modification, it is hidden behind annotated parameters and methods.
 
 Module definition was the hardest part. Actual XML parsing is very simple:
 
 ```java
 Devourer devourer = Devourer.create(new PersonModule());
+// Or:
+// Devourer devourer = Devourer.create(new PersonAnnotatedConfig());
 Reader reader = obtainReaderForXMLSomewhere();
 Stacks stack = devourer.parse(reader);
 List<Person> persons = stacks.pop();
@@ -518,3 +596,28 @@ List<Person> persons = stacks.pop();
 
 That's it. `persons` will be a list of `Person` objects read from the XML and constructed via actions
 configured in the module.
+
+Limitations of the library
+--------------------------
+
+There are several limitations of the library I'm aware of; some of them will be fixed in the next
+versions.
+
+1. Devourer does not handle namespaces well. Currently paths are resolved using local names; it is
+   not possible to distinguish between different namespaces by the means of the path only. The only
+   way you can use namespaces is to get them using `AttributesContext`. This is something I intend
+   to change very soon.
+2. Devourer does not have special shortcut actions to do some specific job, e.g. set JavaBean
+   property or create an object. This is done intentionally, since such actions usually require
+   reflection to work, and I tried to avoid reflection as much as possible. Also, I'm convinced that
+   JavaBean-style class are evil: they are usually mutable (and I think that mutable DTOs should be
+   avoided at all costs) and bring unneccessary clutter in form of getter/setter methods. However,
+   Devourer may provide some shortcut actions in the future if I find them useful.
+3. Devourer API is not stable right now. It is possible that I would change something in the new
+   version which will break your code. I will notify about such changes in my blog.
+   
+Bugs
+----
+
+Currently I don't know of any bugs in the library. If you found one, feel free to post it to the
+(Bitbucket issue tracker)[https://bitbucket.org/googolplex/devourer/issues].
