@@ -1,7 +1,7 @@
 ---
 title: Devourer overview
-date: 23/02/2013
-version: 1
+date: 27/02/2013
+version: 2
 devourerVersion: 0.1
 ---
 
@@ -18,7 +18,7 @@ then you feed it an XML document. Devourer accepts `InputStream`s, `Reader`s, by
 strings. After parsing it produces `Stacks` object which contains results of the processing.
 
 Devourer's source code can be found at Bitbucket:
-<https://bitbucket.org/googolplex/devourer>. Binary release will be available soon at Maven Central:
+<https://bitbucket.org/googolplex/devourer>. Binary release is available at Maven Central:
 
 ```xml
 <dependency>
@@ -27,6 +27,8 @@ Devourer's source code can be found at Bitbucket:
     <version>0.1</version>
 </dependency>
 ```
+
+Devourer is released under Apache 2.0 license, so you can use it everywhere you want.
 
 Inspirations
 ------------
@@ -659,6 +661,5 @@ versions.
 Bugs
 ----
 
-Currently I don't know of any bugs in the library. If you found one, feel free to post it to the
-[Bitbucket issue tracker]
-(https://bitbucket.org/googolplex/devourer/issues).
+Currently I don't know of any bugs in the library. If you find one, feel free to post it to the
+[Bitbucket issue tracker](https://bitbucket.org/googolplex/devourer/issues).
